@@ -98,6 +98,7 @@ int buttons_check()
       {
         // button goes on
       }
+      buttons[button_index].previous_button_state = current_button_state;
     }
   }
 }
