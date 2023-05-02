@@ -57,6 +57,7 @@ void SystemClock_Config(void);
 void button_pressed(int button_id)
 {
   printf("pressed button: %d\n", button_id);
+  usb_keyboard_send_character(button_id + 'a');
 }
 
 typedef struct button_definition_t
