@@ -20,14 +20,17 @@
 #include "main.h"
 #include "adc.h"
 #include "spi.h"
-#include "usb_device.h"
+#include "usb.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
+
+#include "tusb.h"
+#include "usb_descriptors.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,11 +57,118 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void button_pressed(int button_id)
+static uint8_t keyboard_report[6] = {0, 0, 0, 0, 0, 0};
+// For a more in depth example visit:
+// https://github.com/hathach/tinyusb/blob/master/examples/device/hid_composite/src/main.c
+static void hid_send_keycode(int keycode, bool active)
+{
+  // skip if HID is not ready
+  if (!tud_hid_ready())
+    return;
+  int keycode_index = -1;
+  int first_empty_keycode_index = -1;
+  const int keyboard_report_size = (sizeof(keyboard_report) / sizeof(uint8_t));
+  for (int report_index = 0; report_index < keyboard_report_size; report_index++)
+  {
+    if (keyboard_report[report_index] == 0 && first_empty_keycode_index == -1)
+    {
+      first_empty_keycode_index = report_index;
+    }
+    if (keyboard_report[report_index] == keycode)
+    {
+      keycode_index = report_index;
+    }
+  }
+  // button is on and should be send
+  if (active)
+  {
+    if (keycode_index != -1)
+    {
+      // nothing to do here
+      // already pressed
+      return;
+    }
+    else
+    {
+      // add it to the first empty location
+      keyboard_report[first_empty_keycode_index] = keycode;
+    }
+  }
+  else
+  {
+    // inactive
+    if (keycode_index != -1)
+    {
+      keyboard_report[keycode_index] = 0;
+    }
+  }
+  // second parameter is keyboard modifier. Can be something like:
+  // KEYBOARD_MODIFIER_LEFTCTRL
+  // KEYBOARD_MODIFIER_LEFTSHIFT
+  // KEYBOARD_MODIFIER_LEFTALT
+  // KEYBOARD_MODIFIER_LEFTGUI
+  // KEYBOARD_MODIFIER_RIGHTCTRL
+  // KEYBOARD_MODIFIER_RIGHTSHIFT
+  // KEYBOARD_MODIFIER_RIGHTALT
+  // KEYBOARD_MODIFIER_RIGHTGUI
+  uint8_t macro_a_report[8] = {
+      HID_KEY_2,
+      HID_KEY_5,
+      HID_KEY_A,
+      0, 0, 0};
+  uint8_t macro_a_modifiers = KEYBOARD_MODIFIER_LEFTGUI | KEYBOARD_MODIFIER_LEFTSHIFT;
+  tud_hid_keyboard_report(REPORT_ID_KEYBOARD, macro_a_modifiers, macro_a_report);
+}
+
+void button_pressed(int button_id, bool isPressed)
 {
   printf("pressed button: %d\n", button_id);
-  usb_keyboard_send_character(button_id + 'a');
+  hid_send_keycode(HID_KEY_A + button_id, isPressed);
 }
+
+// // CODE JORT __________________________________________
+// typedef enum joystick_direction_t
+// {
+//   JOYSTICK_LEFT = 0,
+//   JOYSTICK_RIGHT,
+//   JOYSTICK_UP,
+//   JOYSTICK_DOWN,
+//   // etc...
+// } joystick_direction_t;
+
+// typedef enum joystick_mode_t
+// {
+//   JOYSTICK_MODE_ARROW_KEYS = 0,
+//   JOYSTICK_MODE_SCROLL,
+// } joystick_mode_t;
+
+// typedef keyboard_report_t
+// {
+//   uint8_t report[8];
+//   uint8_t modifier;
+// }
+// keyboard_report_t;
+
+// keyboard_report_t mode_specific_commands[2][4] = {
+//     {{
+//          .report = {HID_KEY_ARROW_LEFT},
+//          .modifier = 0,
+//      },
+//      {
+//          .report = {HID_KEY_ARROW_RIGHT},
+//          .modifier = 0,
+//      }}}
+
+// void
+// send_joystick(joystick_mode_t mode, joystick_direction_t direction)
+// {
+//   // send this
+//   // mode_specific_commands[mode][direction]
+
+//   // copied from above
+//   // tud_hid_keyboard_report(REPORT_ID_KEYBOARD, macro_a_modifiers, macro_a_report);
+// }
+// END CODE JORT __________________________________________
 
 typedef struct button_definition_t
 {
@@ -79,36 +189,90 @@ button_definition_t buttons[NUMBER_OF_BUTTONS] = {
         .previous_button_state = false,
     }};
 
-int buttons_check()
+void buttons_check()
 {
   for (uint32_t button_index = 0; button_index < NUMBER_OF_BUTTONS; button_index++)
   {
     button_definition_t current_button = buttons[button_index];
     // true button pressed, false button released.
-    bool current_button_state =
-        !HAL_GPIO_ReadPin(current_button.port, current_button.pin);
+    bool current_button_state = !HAL_GPIO_ReadPin(current_button.port, current_button.pin);
     if (current_button_state != current_button.previous_button_state)
     {
-      // We got change
-      if (current_button_state == true)
-      {
-        // button goes off
-        button_pressed(button_index);
-      }
-      else
-      {
-        // button goes on
-      }
+      // we got change
+      button_pressed(button_index, current_button_state);
       buttons[button_index].previous_button_state = current_button_state;
     }
   }
 }
 
+uint32_t joystick_axis[2] = {0};
+void read_joystick()
+{
+  // configure channel one and start conversion
+  ADC_ChannelConfTypeDef sConfig = {0};
+  sConfig.Channel = ADC_CHANNEL_0;
+  sConfig.Rank = ADC_RANK_CHANNEL_NUMBER;
+  sConfig.SamplingTime = ADC_SAMPLETIME_71CYCLES_5;
+  if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_ADC_Start(&hadc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_ADC_PollForConversion(&hadc, 1000) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  HAL_ADC_Stop(&hadc);
+  joystick_axis[0] = HAL_ADC_GetValue(&hadc);
+
+  // read out seconds axis
+  // set channel 1 and disable channel 0
+  sConfig.Channel = ADC_CHANNEL_0;
+  sConfig.Rank = ADC_RANK_NONE;
+  if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Rank = ADC_RANK_CHANNEL_NUMBER;
+  if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  if (HAL_ADC_Start(&hadc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_ADC_PollForConversion(&hadc, 1000) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  HAL_ADC_Stop(&hadc);
+  joystick_axis[1] = HAL_ADC_GetValue(&hadc);
+
+  // disable channel 1
+  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Rank = ADC_RANK_NONE;
+  if (HAL_ADC_ConfigChannel(&hadc, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  printf("axis values: %lu, %lu", joystick_axis[0], joystick_axis[1]);
+}
+
+void use_joystick()
+{
+  printf("axis values: %lu, %lu", joystick_axis[0], joystick_axis[1]);
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
 /* USER CODE END 0 */
 
 /**
@@ -141,17 +305,18 @@ int main(void)
   MX_GPIO_Init();
   MX_ADC_Init();
   MX_SPI1_Init();
-  MX_USB_DEVICE_Init();
+  MX_USB_PCD_Init();
   /* USER CODE BEGIN 2 */
-
+  tud_init(BOARD_TUD_RHPORT);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    HAL_Delay(20);
     buttons_check();
+    read_joystick();
+    tud_task();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -235,8 +400,9 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* User can add his own implementation to report the file name and line
+     number, ex: printf("Wrong parameters value: file %s on line %d\r\n", file,
+     line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
