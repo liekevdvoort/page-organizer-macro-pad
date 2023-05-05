@@ -111,13 +111,16 @@ static void hid_send_keycode(int keycode, bool active)
   // KEYBOARD_MODIFIER_RIGHTSHIFT
   // KEYBOARD_MODIFIER_RIGHTALT
   // KEYBOARD_MODIFIER_RIGHTGUI
-  uint8_t macro_a_report[8] = {
-      HID_KEY_2,
-      HID_KEY_5,
-      HID_KEY_A,
-      0, 0, 0};
-  uint8_t macro_a_modifiers = KEYBOARD_MODIFIER_LEFTGUI | KEYBOARD_MODIFIER_LEFTSHIFT;
-  tud_hid_keyboard_report(REPORT_ID_KEYBOARD, macro_a_modifiers, macro_a_report);
+
+  // EXAMPLE FROM JORT about keyboard shortcuts __________________________
+  // uint8_t macro_a_report[8] = {
+  //     HID_KEY_2,
+  //     HID_KEY_5,
+  //     HID_KEY_A,
+  //     0, 0, 0};
+  // uint8_t macro_a_modifiers = KEYBOARD_MODIFIER_LEFTGUI | KEYBOARD_MODIFIER_LEFTSHIFT;
+  // tud_hid_keyboard_report(REPORT_ID_KEYBOARD, macro_a_modifiers, macro_a_report);
+  // END EXAMPLE FROM JORT __________________________
 }
 
 void button_pressed(int button_id, bool isPressed)
@@ -127,47 +130,58 @@ void button_pressed(int button_id, bool isPressed)
 }
 
 // // CODE JORT __________________________________________
-// typedef enum joystick_direction_t
-// {
-//   JOYSTICK_LEFT = 0,
-//   JOYSTICK_RIGHT,
-//   JOYSTICK_UP,
-//   JOYSTICK_DOWN,
-//   // etc...
-// } joystick_direction_t;
+typedef enum joystick_direction_t
+{
+  JOYSTICK_TOP = 0,
+  JOYSTICK_RIGHT_TOP,
+  JOYSTICK_RIGHT,
+  JOYSTICK_RIGHT_BOTTOM,
+  JOYSTICK_BOTTOM,
+  JOYSTICK_LEFT_BOTTOM,
+  JOYSTICK_LEFT,
+  JOYSTICK_LEFT_TOP,
+} joystick_direction_t;
 
-// typedef enum joystick_mode_t
-// {
-//   JOYSTICK_MODE_ARROW_KEYS = 0,
-//   JOYSTICK_MODE_SCROLL,
-// } joystick_mode_t;
+typedef enum joystick_mode_t
+{
+  JOYSTICK_MODE_MAGNET = 0,
+  JOYSTICK_MODE_DESKTOPS,
+  JOYSTICK_MODE_ARROW_KEYS,
+  JOYSTICK_MODE_SCROLL,
+} joystick_mode_t;
 
-// typedef keyboard_report_t
-// {
-//   uint8_t report[8];
-//   uint8_t modifier;
-// }
-// keyboard_report_t;
+typedef struct keyboard_report_t
+{
+  uint8_t report[8];
+  uint8_t modifier;
+} keyboard_report_t;
 
-// keyboard_report_t mode_specific_commands[2][4] = {
-//     {{
-//          .report = {HID_KEY_ARROW_LEFT},
-//          .modifier = 0,
-//      },
-//      {
-//          .report = {HID_KEY_ARROW_RIGHT},
-//          .modifier = 0,
-//      }}}
+keyboard_report_t mode_specific_commands[4][8] = {
+    // modus 1 arrow keys
+    {(keyboard_report_t){
+         .report = {HID_KEY_ARROW_UP},
+         .modifier = 0,
+     },
+     (keyboard_report_t){
+         .report = {HID_KEY_ARROW_RIGHT},
+         .modifier = 0,
+     }},
+    // modus 2 scroll
+    {},
+    // modus 3 magnet controls
+    {},
+    // modus 4 switch desktop
+    {},
+};
 
-// void
-// send_joystick(joystick_mode_t mode, joystick_direction_t direction)
-// {
-//   // send this
-//   // mode_specific_commands[mode][direction]
+void send_joystick(joystick_mode_t mode, joystick_direction_t direction)
+{
+  // send this
+  // mode_specific_commands[mode][direction]
 
-//   // copied from above
-//   // tud_hid_keyboard_report(REPORT_ID_KEYBOARD, macro_a_modifiers, macro_a_report);
-// }
+  // copied from above
+  // tud_hid_keyboard_report(REPORT_ID_KEYBOARD, macro_a_modifiers, macro_a_report);
+}
 // END CODE JORT __________________________________________
 
 typedef struct button_definition_t
