@@ -42,6 +42,11 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define NUMBER_OF_BUTTONS 2
+#define AXIS_MAX_VALUE 4028 / 2
+#define AXIS_MIN_VALUE 0
+#define AXIS_THRESHOLD AXIS_MAX_VALUE - 400
+#define AXIS_RETURN_THRESHOLD AXIS_THRESHOLD - 200
+#define QUEUE_LENGTH 8
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -205,7 +210,7 @@ keyboard_report_t mode_specific_commands[4][8] = {
 
 void send_joystick(joystick_mode_t mode, joystick_direction_t direction)
 {
-
+  printf("sendJoystick mode direction: %lu, %lu", mode, direction);
   // send this
   // mode_specific_commands[mode][direction]
 
@@ -328,12 +333,131 @@ void read_joystick()
   }
 
   printf("axis values: %lu, %lu", joystick_axis[0], joystick_axis[1]);
+  use_joystick(joystick_axis[0], joystick_axis[1]);
 }
 
-void use_joystick()
+typedef struct axes_position_definition_t
+{
+  bool left;
+  bool right;
+  bool top;
+  bool bottom;
+} axes_position_definition_t;
+
+axes_position_definition_t axes_position = {
+    .left = false,
+    .right = false,
+    .top = false,
+    .bottom = false,
+};
+
+bool check_axis_position(int16_t value, bool *previous_state)
+{
+  // Based on the previous state, use a different threshold to avoid overtriggering.
+  if (*previous_state)
+  {
+    if (value < AXIS_RETURN_THRESHOLD)
+    {
+      *previous_state = false;
+      return true;
+    }
+  }
+  else
+  {
+    if (value > AXIS_THRESHOLD)
+    {
+      *previous_state = true;
+      return true;
+    }
+  }
+  return false;
+}
+
+void use_joystick(uint32_t axis_horizontal, uint32_t axis_vertical)
 {
   printf("axis values: %lu, %lu", joystick_axis[0], joystick_axis[1]);
+  int16_t calculated_vertical_axis = axis_vertical - AXIS_MAX_VALUE;
+  int16_t calculated_horizontal_axis = axis_horizontal - AXIS_MAX_VALUE;
+
+  bool has_update = false;
+
+  // Horizontal
+  if (check_axis_position(calculated_horizontal_axis * -1, &axes_position.left))
+  {
+    has_update = true;
+  }
+  if (check_axis_position(calculated_horizontal_axis, &axes_position.right))
+  {
+    has_update = true;
+  }
+
+  // Vertical
+  if (check_axis_position(calculated_vertical_axis, &axes_position.top))
+  {
+    has_update = true;
+  }
+  if (check_axis_position(calculated_vertical_axis * -1, &axes_position.bottom))
+  {
+    has_update = true;
+  }
+
+  // If one of the computed values updated (so one of the thresholds is passed), do an update.
+  if (has_update)
+  {
+    axes_changed(axes_position);
+  }
 }
+
+void axes_changed(axes_position_definition_t position)
+{
+  // Define what keycombination needs to be sent based on the direction of the joystick.
+  uint8_t keycode = 0;
+  uint8_t modifiers = 0;
+  if (position.left)
+  {
+    if (alt_tab)
+    {
+      keycode = HID_KEY_TAB;
+      modifiers = KEYBOARD_MODIFIER_LEFTGUI | KEYBOARD_MODIFIER_LEFTSHIFT;
+    }
+    else
+    {
+      keycode = HID_KEY_ARROW_LEFT;
+      modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
+    }
+  }
+  if (position.right)
+  {
+    if (alt_tab)
+    {
+      keycode = HID_KEY_TAB;
+      modifiers = KEYBOARD_MODIFIER_LEFTGUI;
+    }
+    else
+    {
+      keycode = HID_KEY_ARROW_RIGHT;
+      modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
+    }
+  }
+  if (position.top)
+  {
+    keycode = HID_KEY_ARROW_UP;
+    modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
+  }
+  if (position.bottom)
+  {
+    keycode = HID_KEY_ARROW_DOWN;
+    modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
+  }
+
+  // Send the keycombination, and directly turn it off to avoid retriggering.
+  hid_send_keycode(keycode, modifiers, true);
+  hid_send_keycode(keycode, modifiers, false);
+
+  // queue_keycode(keycode,  modifiers, true);
+  // queue_keycode(keycode,  modifiers, false);
+}
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
