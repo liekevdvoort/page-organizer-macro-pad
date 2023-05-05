@@ -64,7 +64,6 @@
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 static uint8_t keyboard_report[6] = {0, 0, 0, 0, 0, 0};
-static bool alt_tab = false;
 // For a more in depth example visit:
 // https://github.com/hathach/tinyusb/blob/master/examples/device/hid_composite/src/main.c
 
@@ -137,14 +136,7 @@ static void hid_send_keycode(uint8_t keycode, uint8_t modifiers, bool active)
 
   if (!active)
   {
-    if (alt_tab)
-    {
-      modifiers = KEYBOARD_MODIFIER_LEFTGUI;
-    }
-    else
-    {
-      modifiers = 0;
-    }
+    modifiers = 0;
   }
 
   tud_hid_keyboard_report(REPORT_ID_KEYBOARD, modifiers, keyboard_report);
@@ -152,10 +144,6 @@ static void hid_send_keycode(uint8_t keycode, uint8_t modifiers, bool active)
 
 void button_pressed(bool isPressed, uint8_t keycode, uint8_t modifiers)
 {
-  if (keycode == 0 && alt_tab != isPressed)
-  {
-    alt_tab = isPressed;
-  }
   printf("keycode %d modifiers %d", keycode, modifiers);
 
   hid_send_keycode(keycode, modifiers, isPressed);
@@ -333,7 +321,7 @@ void read_joystick()
   }
 
   printf("axis values: %lu, %lu", joystick_axis[0], joystick_axis[1]);
-  use_joystick(joystick_axis[0], joystick_axis[1]);
+  axes_check(joystick_axis[0], joystick_axis[1]);
 }
 
 typedef struct axes_position_definition_t
@@ -373,7 +361,7 @@ bool check_axis_position(int16_t value, bool *previous_state)
   return false;
 }
 
-void use_joystick(uint32_t axis_horizontal, uint32_t axis_vertical)
+void axes_check(uint32_t axis_horizontal, uint32_t axis_vertical)
 {
   printf("axis values: %lu, %lu", joystick_axis[0], joystick_axis[1]);
   int16_t calculated_vertical_axis = axis_vertical - AXIS_MAX_VALUE;
@@ -415,29 +403,13 @@ void axes_changed(axes_position_definition_t position)
   uint8_t modifiers = 0;
   if (position.left)
   {
-    if (alt_tab)
-    {
-      keycode = HID_KEY_TAB;
-      modifiers = KEYBOARD_MODIFIER_LEFTGUI | KEYBOARD_MODIFIER_LEFTSHIFT;
-    }
-    else
-    {
-      keycode = HID_KEY_ARROW_LEFT;
-      modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
-    }
+    keycode = HID_KEY_ARROW_LEFT;
+    modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
   }
   if (position.right)
   {
-    if (alt_tab)
-    {
-      keycode = HID_KEY_TAB;
-      modifiers = KEYBOARD_MODIFIER_LEFTGUI;
-    }
-    else
-    {
-      keycode = HID_KEY_ARROW_RIGHT;
-      modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
-    }
+    keycode = HID_KEY_ARROW_RIGHT;
+    modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
   }
   if (position.top)
   {
