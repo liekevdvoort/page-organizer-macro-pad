@@ -90,6 +90,23 @@ static uint8_t keyboard_report[6] = {0, 0, 0, 0, 0, 0};
 //   // END EXAMPLE FROM JORT __________________________
 // }
 
+static bool report_complete = true;
+uint32_t report_send_time = 0;
+// Invoked when sent REPORT successfully to host
+// Application can use this to send the next report
+// Note: For composite reports, report[0] is report ID
+void tud_hid_report_complete_cb(uint8_t instance, uint8_t const *report, uint16_t len)
+{
+  (void)instance;
+  (void)len;
+
+  // uint8_t next_report_id = report[0] + 1u;
+
+  // if (next_report_id < REPORT_ID_COUNT) {
+  //   // send_hid_report(next_report_id, board_button_read());
+  // }
+  report_complete = true;
+}
 static void hid_send_keycode(uint8_t keycode, uint8_t modifiers, bool active)
 {
   // skip if HID is not ready
@@ -138,8 +155,17 @@ static void hid_send_keycode(uint8_t keycode, uint8_t modifiers, bool active)
   {
     modifiers = 0;
   }
-
+  report_send_time = HAL_GetTick();
+  report_complete = false;
   tud_hid_keyboard_report(REPORT_ID_KEYBOARD, modifiers, keyboard_report);
+}
+
+void wait_for_report_to_complete(uint32_t timeout)
+{
+  while (!report_complete && HAL_GetTick() - report_send_time <= timeout)
+  {
+    tud_task();
+  }
 }
 
 void button_pressed(bool isPressed, uint8_t keycode, uint8_t modifiers)
@@ -401,6 +427,10 @@ void axes_changed(axes_position_definition_t position)
   // Define what keycombination needs to be sent based on the direction of the joystick.
   uint8_t keycode = 0;
   uint8_t modifiers = 0;
+  if (!position.left && !position.right && !position.top && !position.bottom)
+  {
+    return;
+  }
   if (position.left)
   {
     keycode = HID_KEY_ARROW_LEFT;
@@ -424,6 +454,7 @@ void axes_changed(axes_position_definition_t position)
 
   // Send the keycombination, and directly turn it off to avoid retriggering.
   hid_send_keycode(keycode, modifiers, true);
+  wait_for_report_to_complete(100);
   hid_send_keycode(keycode, modifiers, false);
 
   // queue_keycode(keycode,  modifiers, true);
