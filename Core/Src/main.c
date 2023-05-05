@@ -31,6 +31,7 @@
 
 #include "tusb.h"
 #include "usb_descriptors.h"
+#include "debounce.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -58,16 +59,84 @@
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 static uint8_t keyboard_report[6] = {0, 0, 0, 0, 0, 0};
+static bool alt_tab = false;
 // For a more in depth example visit:
 // https://github.com/hathach/tinyusb/blob/master/examples/device/hid_composite/src/main.c
-static void hid_send_keycode(int keycode, bool active)
+
+// static void hid_send_keycode(int keycode, bool active)
+// {
+//   // skip if HID is not ready
+//   if (!tud_hid_ready())
+//     return;
+//   int keycode_index = -1;
+//   int first_empty_keycode_index = -1;
+//   const int keyboard_report_size = (sizeof(keyboard_report) / sizeof(uint8_t));
+//   for (int report_index = 0; report_index < keyboard_report_size; report_index++)
+//   {
+//     if (keyboard_report[report_index] == 0 && first_empty_keycode_index == -1)
+//     {
+//       first_empty_keycode_index = report_index;
+//     }
+//     if (keyboard_report[report_index] == keycode)
+//     {
+//       keycode_index = report_index;
+//     }
+//   }
+//   // button is on and should be send
+//   if (active)
+//   {
+//     if (keycode_index != -1)
+//     {
+//       // nothing to do here
+//       // already pressed
+//       return;
+//     }
+//     else
+//     {
+//       // add it to the first empty location
+//       keyboard_report[first_empty_keycode_index] = keycode;
+//     }
+//   }
+//   else
+//   {
+//     // inactive
+//     if (keycode_index != -1)
+//     {
+//       keyboard_report[keycode_index] = 0;
+//     }
+//   }
+
+//   // second parameter is keyboard modifier. Can be something like:
+//   // KEYBOARD_MODIFIER_LEFTCTRL
+//   // KEYBOARD_MODIFIER_LEFTSHIFT
+//   // KEYBOARD_MODIFIER_LEFTALT
+//   // KEYBOARD_MODIFIER_LEFTGUI
+//   // KEYBOARD_MODIFIER_RIGHTCTRL
+//   // KEYBOARD_MODIFIER_RIGHTSHIFT
+//   // KEYBOARD_MODIFIER_RIGHTALT
+//   // KEYBOARD_MODIFIER_RIGHTGUI
+
+//   // EXAMPLE FROM JORT about keyboard shortcuts __________________________
+//   // uint8_t macro_a_report[8] = {
+//   //     HID_KEY_2,
+//   //     HID_KEY_5,
+//   //     HID_KEY_A,
+//   //     0, 0, 0};
+//   // uint8_t macro_a_modifiers = KEYBOARD_MODIFIER_LEFTGUI | KEYBOARD_MODIFIER_LEFTSHIFT;
+//   // tud_hid_keyboard_report(REPORT_ID_KEYBOARD, macro_a_modifiers, macro_a_report);
+//   // END EXAMPLE FROM JORT __________________________
+// }
+
+static void hid_send_keycode(uint8_t keycode, uint8_t modifiers, bool active)
 {
   // skip if HID is not ready
   if (!tud_hid_ready())
     return;
+
+  const int keyboard_report_size = (sizeof(keyboard_report) / sizeof(uint8_t));
   int keycode_index = -1;
   int first_empty_keycode_index = -1;
-  const int keyboard_report_size = (sizeof(keyboard_report) / sizeof(uint8_t));
+
   for (int report_index = 0; report_index < keyboard_report_size; report_index++)
   {
     if (keyboard_report[report_index] == 0 && first_empty_keycode_index == -1)
@@ -79,12 +148,11 @@ static void hid_send_keycode(int keycode, bool active)
       keycode_index = report_index;
     }
   }
-  // button is on and should be send
+  // button is on and should be sent
   if (active)
   {
     if (keycode_index != -1)
     {
-      // nothing to do here
       // already pressed
       return;
     }
@@ -102,31 +170,37 @@ static void hid_send_keycode(int keycode, bool active)
       keyboard_report[keycode_index] = 0;
     }
   }
-  // second parameter is keyboard modifier. Can be something like:
-  // KEYBOARD_MODIFIER_LEFTCTRL
-  // KEYBOARD_MODIFIER_LEFTSHIFT
-  // KEYBOARD_MODIFIER_LEFTALT
-  // KEYBOARD_MODIFIER_LEFTGUI
-  // KEYBOARD_MODIFIER_RIGHTCTRL
-  // KEYBOARD_MODIFIER_RIGHTSHIFT
-  // KEYBOARD_MODIFIER_RIGHTALT
-  // KEYBOARD_MODIFIER_RIGHTGUI
 
-  // EXAMPLE FROM JORT about keyboard shortcuts __________________________
-  // uint8_t macro_a_report[8] = {
-  //     HID_KEY_2,
-  //     HID_KEY_5,
-  //     HID_KEY_A,
-  //     0, 0, 0};
-  // uint8_t macro_a_modifiers = KEYBOARD_MODIFIER_LEFTGUI | KEYBOARD_MODIFIER_LEFTSHIFT;
-  // tud_hid_keyboard_report(REPORT_ID_KEYBOARD, macro_a_modifiers, macro_a_report);
-  // END EXAMPLE FROM JORT __________________________
+  if (!active)
+  {
+    if (alt_tab)
+    {
+      modifiers = KEYBOARD_MODIFIER_LEFTGUI;
+    }
+    else
+    {
+      modifiers = 0;
+    }
+  }
+
+  tud_hid_keyboard_report(REPORT_ID_KEYBOARD, modifiers, keyboard_report);
 }
 
-void button_pressed(int button_id, bool isPressed)
+// void button_pressed(int button_id, bool isPressed)
+// {
+//   printf("pressed button: %d\n", button_id);
+//   hid_send_keycode(HID_KEY_A + button_id, isPressed);
+// }
+void button_pressed(bool isPressed, uint8_t keycode, uint8_t modifiers)
 {
-  printf("pressed button: %d\n", button_id);
-  hid_send_keycode(HID_KEY_A + button_id, isPressed);
+  if (keycode == 0 && alt_tab != isPressed)
+  {
+    alt_tab = isPressed;
+  }
+  printf("keycode %d modifiers %d", keycode, modifiers);
+
+  hid_send_keycode(keycode, modifiers, isPressed);
+  // queue_keycode(keycode,  modifiers, isPressed);
 }
 
 // // CODE JORT __________________________________________
@@ -172,6 +246,7 @@ keyboard_report_t mode_specific_commands[4][8] = {
     {},
     // modus 4 switch desktop
     {},
+
 };
 
 void send_joystick(joystick_mode_t mode, joystick_direction_t direction)
@@ -184,40 +259,95 @@ void send_joystick(joystick_mode_t mode, joystick_direction_t direction)
 }
 // END CODE JORT __________________________________________
 
+// typedef struct button_definition_t
+// {
+//   GPIO_TypeDef *port;
+//   uint16_t pin;
+//   bool previous_button_state;
+// } button_definition_t;
+
+// button_definition_t buttons[NUMBER_OF_BUTTONS] = {
+//     {
+//         .port = GPIO_INPUT_SWITCH_GPIO_Port,
+//         .pin = GPIO_INPUT_SWITCH_Pin,
+//         .previous_button_state = false,
+//     },
+//     {
+//         .port = GPIO_IN_JOYSTICK_SEL_GPIO_Port,
+//         .pin = GPIO_IN_JOYSTICK_SEL_Pin,
+//         .previous_button_state = false,
+//     }};
+
 typedef struct button_definition_t
 {
   GPIO_TypeDef *port;
   uint16_t pin;
   bool previous_button_state;
+  debounce_t debounce;
+  uint8_t keycode;
+  uint8_t modifiers;
 } button_definition_t;
 
 button_definition_t buttons[NUMBER_OF_BUTTONS] = {
     {
+        // Alt Tab
         .port = GPIO_INPUT_SWITCH_GPIO_Port,
         .pin = GPIO_INPUT_SWITCH_Pin,
         .previous_button_state = false,
+        .debounce = {0},
+        .keycode = HID_KEY_ENTER,
+        .modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT,
     },
     {
+        // Maximize
         .port = GPIO_IN_JOYSTICK_SEL_GPIO_Port,
         .pin = GPIO_IN_JOYSTICK_SEL_Pin,
         .previous_button_state = false,
+        .debounce = {0},
+        .keycode = HID_KEY_ENTER,
+        .modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT,
     }};
+
+void initialize_buttons()
+{
+  for (uint32_t button_index = 0; button_index < NUMBER_OF_BUTTONS; button_index++)
+  {
+    buttons[button_index].debounce = debounce_init(HAL_GetTick, false, 5, NULL);
+  }
+}
 
 void buttons_check()
 {
   for (uint32_t button_index = 0; button_index < NUMBER_OF_BUTTONS; button_index++)
   {
     button_definition_t current_button = buttons[button_index];
-    // true button pressed, false button released.
-    bool current_button_state = !HAL_GPIO_ReadPin(current_button.port, current_button.pin);
+
+    // True if button is pressed, False if button is released
+    bool current_button_state = debounce_update(&buttons[button_index].debounce, !HAL_GPIO_ReadPin(current_button.port, current_button.pin));
+
     if (current_button_state != current_button.previous_button_state)
     {
-      // we got change
-      button_pressed(button_index, current_button_state);
+      // We got a change on the key
+      button_pressed(current_button_state, current_button.keycode, current_button.modifiers);
       buttons[button_index].previous_button_state = current_button_state;
     }
   }
 }
+// void buttons_check()
+// {
+//   for (uint32_t button_index = 0; button_index < NUMBER_OF_BUTTONS; button_index++)
+//   {
+//     button_definition_t current_button = buttons[button_index];
+//     // true button pressed, false button released.
+//     bool current_button_state = !HAL_GPIO_ReadPin(current_button.port, current_button.pin);
+//     if (current_button_state != current_button.previous_button_state)
+//     {
+//       // we got change
+//       button_pressed(button_index, current_button_state);
+//       buttons[button_index].previous_button_state = current_button_state;
+//     }
+//   }
+// }
 
 uint32_t joystick_axis[2] = {0};
 void read_joystick()
@@ -322,6 +452,7 @@ int main(void)
   MX_USB_PCD_Init();
   /* USER CODE BEGIN 2 */
   tud_init(BOARD_TUD_RHPORT);
+  initialize_buttons();
   /* USER CODE END 2 */
 
   /* Infinite loop */
