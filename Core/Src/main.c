@@ -250,8 +250,8 @@ button_definition_t buttons[NUMBER_OF_BUTTONS] = {
         .pin = GPIO_INPUT_SWITCH_Pin,
         .previous_button_state = false,
         .debounce = {0},
-        .keycode = HID_KEY_BACKSPACE,
-        .modifiers = KEYBOARD_MODIFIER_LEFTALT | KEYBOARD_MODIFIER_LEFTCTRL,
+        // .keycode = HID_KEY_BACKSPACE,
+        // .modifiers = KEYBOARD_MODIFIER_LEFTALT | KEYBOARD_MODIFIER_LEFTCTRL,
     },
     {
         // Minimize
@@ -271,6 +271,20 @@ void initialize_buttons()
   }
 }
 
+int modus = 0;
+
+void update_modus()
+{
+  if (modus == 0)
+  {
+    modus = 1;
+  }
+  else
+  {
+    modus = 0;
+  }
+}
+
 void buttons_check()
 {
   for (uint32_t button_index = 0; button_index < NUMBER_OF_BUTTONS; button_index++)
@@ -282,6 +296,10 @@ void buttons_check()
 
     if (current_button_state != current_button.previous_button_state)
     {
+      if (current_button.pin == GPIO_INPUT_SWITCH_Pin && current_button_state)
+      {
+        update_modus();
+      }
       // We got a change on the key
       button_pressed(current_button_state, current_button.keycode, current_button.modifiers);
       buttons[button_index].previous_button_state = current_button_state;
@@ -433,13 +451,29 @@ void axes_changed(axes_position_definition_t position)
   }
   if (position.left)
   {
-    keycode = HID_KEY_ARROW_LEFT;
-    modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
+    if (modus == 0)
+    {
+      keycode = HID_KEY_ARROW_LEFT;
+      modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
+    }
+    if (modus == 1)
+    {
+      keycode = HID_KEY_ARROW_LEFT;
+      modifiers = KEYBOARD_MODIFIER_LEFTCTRL;
+    }
   }
   if (position.right)
   {
-    keycode = HID_KEY_ARROW_RIGHT;
-    modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
+    if (modus == 0)
+    {
+      keycode = HID_KEY_ARROW_RIGHT;
+      modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
+    }
+    if (modus == 1)
+    {
+      keycode = HID_KEY_ARROW_RIGHT;
+      modifiers = KEYBOARD_MODIFIER_LEFTCTRL;
+    }
   }
   if (position.top)
   {
