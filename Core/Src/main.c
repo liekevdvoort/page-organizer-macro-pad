@@ -275,9 +275,9 @@ int modus = 0;
 
 void update_modus()
 {
-  if (modus == 0)
+  if (modus < 2)
   {
-    modus = 1;
+    modus = modus + 1;
   }
   else
   {
@@ -461,6 +461,10 @@ void axes_changed(axes_position_definition_t position)
       keycode = HID_KEY_ARROW_LEFT;
       modifiers = KEYBOARD_MODIFIER_LEFTCTRL;
     }
+    if (modus == 2)
+    {
+      keycode = HID_KEY_ARROW_LEFT;
+    }
   }
   if (position.right)
   {
@@ -474,16 +478,34 @@ void axes_changed(axes_position_definition_t position)
       keycode = HID_KEY_ARROW_RIGHT;
       modifiers = KEYBOARD_MODIFIER_LEFTCTRL;
     }
+    if (modus == 2)
+    {
+      keycode = HID_KEY_ARROW_RIGHT;
+    }
   }
   if (position.top)
   {
-    keycode = HID_KEY_ARROW_UP;
-    modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
+    if (modus == 0)
+    {
+      keycode = HID_KEY_ARROW_UP;
+      modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
+    }
+    if (modus == 2)
+    {
+      keycode = HID_KEY_ARROW_UP;
+    }
   }
   if (position.bottom)
   {
-    keycode = HID_KEY_ARROW_DOWN;
-    modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
+    if (modus == 0)
+    {
+      keycode = HID_KEY_ARROW_DOWN;
+      modifiers = KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_LEFTALT;
+    }
+    if (modus == 2)
+    {
+      keycode = HID_KEY_ARROW_DOWN;
+    }
   }
 
   // Send the keycombination, and directly turn it off to avoid retriggering.
